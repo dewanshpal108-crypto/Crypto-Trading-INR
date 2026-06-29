@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id String @id @default(uuid())
+  email String @unique
+  username String
+  password String
+  createdAt DateTime @default(now())
+
+  orders       Order[]
+  wallets      Wallet[]
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model Wallet{
+  id String @id @default(uuid())
+  userId String
+  assetSymbol String 
+  availableBalance Decimal @db.Decimal(20,8)
+  lockedBalance Decimal @db.Decimal(20,8) @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields:[userId], references:[id], onDelete: Cascade)
+
+  @@unique([userId, assetSymbol])
+  @@index([userId])
+  @@map("wallets")
+}
+
+model Stock{
+  id  String  @id @default(uuid())
+  title String
+  symbol String
+  createdAt DateTime @default(now())
+
+  orders Order[]
+
+  @@map("stocks")
+}
+
+model Order {
+  id          String   @id @default(uuid())
+  userId      String
+  stockId      String   
+  side        Side    
+  type        Type   
+  price       Decimal  @db.Decimal(18,4)
+  quantity    Decimal  @db.Decimal(18,4)
+  filledQty   Decimal  @db.Decimal(18,8) @default(0)
+  status      Status   
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields:[userId], references:[id], onDelete : Cascade)
+  stock Stock @relation(fields:[stockId], references:[id], onDelete : Cascade)
+
+  bidsFills Fill[] @relation("BuyOrderFills")
+  sellFills Fill[] @relation("SellOrderFills")
+
+  @@index([userId])
+  @@index([stockId,status,price])
+  @@map("orders")
+}
+
+enum Side {
+  BUY
+  SELL
+}
+
+enum Type {
+  LIMIT
+  MARKET
+}
+
+enum Status {
+  OPEN
+  FILLED
+  CANCELLED
+}
+
+model Fill{
+  id String @id @default(uuid())
+  StockId String
+  price Decimal @db.Decimal(18,4)
+  qty Decimal @db.Decimal(18,8)
+  buyOrderId String
+  sellOrderId String
+  createdAt DateTime @default(now())
+
+  buyOrder Order @relation("BuyOrderFills",fields: [buyOrderId],references:[id], onDelete: Cascade)
+  sellOrder Order @relation("SellOrderFills",fields: [sellOrderId],references:[id], onDelete: Cascade)
+
+  @@index([buyOrderId])
+  @@index([sellOrderId])
+  @@map("fills")
+}
+
+model Transaction{
+  id String @id @default(uuid())
+  userId String
+  amount Decimal @db.Decimal(18,2)
+  type TransactionType
+  status TxStatus @default(PENDING)
+  providerReference String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+
+  @@index([userId])
+  @@map("transactions")
+}
+
+enum TransactionType{
+  DEPOSIT
+  WITHDRAW
+}
+
+enum TxStatus{
+  PENDING
+  SUCCESS
+  FAILED
+}
