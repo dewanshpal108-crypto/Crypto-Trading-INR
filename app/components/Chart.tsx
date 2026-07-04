@@ -55,11 +55,16 @@ export default function Chart({ symbol, resolution: initialResolution = "1h" }: 
   const [resolution, setResolution] = useState<Resolution>(initialResolution);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [USD_to_INR, setUSD_to_INR] = useState<number>(95.70);
+
   useEffect(() => {
     if (!containerRef.current) return;
     let chart: any;
     let resizeObserver: ResizeObserver;
     let ws: WebSocket | null = null;
+    fetch("/api/v1/currency-conversion")
+      .then((res) => res.json())
+      .then((data) => setUSD_to_INR(data.data));
     setLoading(true);
     setError(null);
     // Dynamic import prevents SSR crash — lightweight-charts uses browser APIs
@@ -185,8 +190,8 @@ export default function Chart({ symbol, resolution: initialResolution = "1h" }: 
           <span className="text-base font-bold">{symbol} Spot Chart</span>
           {lastPrice !== null && (
             <span className="text-sm font-mono text-yellow-400">
-              ≈ $
-              {lastPrice.toLocaleString(undefined, {
+              ₹
+              {(lastPrice * USD_to_INR).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}

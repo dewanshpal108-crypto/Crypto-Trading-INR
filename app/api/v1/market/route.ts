@@ -1,42 +1,56 @@
-import {NextResponse} from "next/server";
+import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import Redis from "ioredis";
+import { GET as getCurrencyConversion } from "../currency-conversion/route";
 
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
+let USD_TO_INR: number = 95.70;
 
-const USD_TO_INR = 95.70;
+async function fetchCurrencyConversion() {
+    try {
+        const response = await getCurrencyConversion();
+        if (response.ok) {
+            const data = await response.json();
+            USD_TO_INR = Number(data.data ?? 95.70);
+        }
+    } catch (error) {
+        console.error("Error fetching currency conversion:", error);
+    }
+}
+
+// Fetch currency conversion immediately and set an interval to refresh it every 10 minutes
+fetchCurrencyConversion();
+setInterval(fetchCurrencyConversion, 10 * 60 * 1000); // 10 minute
 
 interface BinanceTickerPayload {
     symbol: string,
-    lastPrice : string,
-    priceChange : string,
-    priceChangePercent : string,
-    volume : string,
+    lastPrice: string,
+    priceChange: string,
+    priceChangePercent: string,
+    volume: string,
     highPrice: string,
     lowPrice: string,
 }
 
-export async function GET(){
-    try{
+export async function GET() {
+    try {
 
         //1. grab the supported pairs from db
         const activeStocks = await prisma.stock.findMany({
-            orderBy: {symbol: 'asc'},
+            orderBy: { symbol: 'asc' },
         });
 
         //2 .check the global cache layer inside Redis
         const cachedGlobalStats = await redis.get("market:global:24hr");
         let rawTickerArray: BinanceTickerPayload[] = [];
 
-        if(cachedGlobalStats)
-        {
+        if (cachedGlobalStats) {
             rawTickerArray = JSON.parse(cachedGlobalStats);
-        }else{
-            const binanceResponse = await fetch("https://api.binance.com/api/v3/ticker/24hr",{cache: 'no-store'});
+        } else {
+            const binanceResponse = await fetch("https://api.binance.com/api/v3/ticker/24hr", { cache: 'no-store' });
 
-            if(!binanceResponse.ok)
-            {
+            if (!binanceResponse.ok) {
                 throw new Error("failed fetching from binance public api")
             }
 
@@ -48,14 +62,13 @@ export async function GET(){
         }
 
         //now we will return the formatted response with our local symbols
-        const markets = activeStocks.map((stock)=>
-        {
+        const markets = activeStocks.map((stock) => {
             const assetPrefix = stock.symbol.split("_")[0];
-            const targetBinanceSymbol  = `${assetPrefix}USDT`;
+            const targetBinanceSymbol = `${assetPrefix}USDT`;
 
             const matchStats = rawTickerArray.find((item) => item.symbol === targetBinanceSymbol);
 
-            if(!matchStats){
+            if (!matchStats) {
                 return {
                     id: stock.id,
                     title: stock.title,
@@ -68,7 +81,7 @@ export async function GET(){
                     low24h: "0.00",
                 }
             }
-            else{
+            else {
                 return {
                     id: stock.id,
                     title: stock.title,
@@ -82,10 +95,10 @@ export async function GET(){
                 }
             }
         })
-        return NextResponse.json({success:true,data:markets});
+        return NextResponse.json({ success: true, data: markets });
     }
-    catch(error){
-        console.error("Error in fetching market data :",error);
-        return NextResponse.json({success:false,message:error},{status:500});
+    catch (error) {
+        console.error("Error in fetching market data :", error);
+        return NextResponse.json({ success: false, message: error }, { status: 500 });
     }
 }
